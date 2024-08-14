@@ -1,30 +1,49 @@
+use std::fmt;
+use std::io::{self, Write};
 use std::net::TcpListener;
 use std::result;
-use std::io::Write;
 
-type Result<T>=result::Result<T,()>;
+const SAFE_MODE: bool = true;
+type Result<T> = result::Result<T, io::Error>;
 
-fn main()->Result<()> {
-    let address="127.0.0.1:6969";
-   let _listener= TcpListener::bind(address).map_err(|err|{
-    eprint!("ERROR:Could not bind {address} : {err}")
-   })?;
-   print!("Listen to {address}");
-   for stream in _listener.incoming(){
-    match stream{
-        Ok(mut steam)=>{
+struct Sensitive<T> {
+    inner: T,
+}
 
-          let _=  writeln!(steam,"Hallo Mein Führer ;) ").map_err(|err|{
-                eprintln!("ERROR: could not write msg to use : {err}, ")
-
-            });
-        
-        }
-            Err(err)=>{ 
-            eprintln!("ERROR: could not accept connection: {err}, ")
+impl<T: fmt::Display> fmt::Display for Sensitive<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if SAFE_MODE {
+            writeln!(f, "[REDACTED]")
+        } else {
+            writeln!(f, "{}", self.inner)
         }
     }
+}
 
-   }
-Ok(())
+fn main() -> Result<()> {
+    let address = "127.0.0.1:6969";
+    let listener = TcpListener::bind(address).map_err(|err| {
+        eprint!("ERROR: Could not bind {}: {}\n", address, err);
+        err
+    })?;
+    println!("Listening on {}", address);
+
+    for stream in listener.incoming() {
+        match stream {
+            Ok(mut stream) => {
+                let message = Sensitive {
+                    inner: "Hallo Mein Führer ;)",
+                };
+
+                let _ = writeln!(stream, "{}", message).map_err(|err| {
+                    eprintln!("ERROR: Could not write message: {}", err);
+                    err
+                });
+            }
+            Err(err) => {
+                eprintln!("ERROR: Could not accept connection: {}", err);
+            }
+        }
+    }
+    Ok(())
 }
